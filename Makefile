@@ -10,7 +10,8 @@ CFLAGS := \
 -Wno-multichar \
 -Wno-unused-variable \
 -Wno-unused-parameter \
--Wno-missing-field-initializers
+-Wno-missing-field-initializers \
+-Wno-sign-compare
 
 ### Linker definition ###
 LD := gcc

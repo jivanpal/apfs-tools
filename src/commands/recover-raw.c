@@ -36,7 +36,7 @@ static void print_usage(int argc, char** argv) {
     fprintf(
         argc == 1 ? stdout : stderr,
         
-        "Usage:   %s <container> <volume ID> <file-system object ID in volume>\n"
+        "Usage:   %s <container> <volume ID> <file-system object ID in volume> [<fs tree root node address> <omap tree root node address>]\n"
         "Example: %s /dev/disk0s2  0  0xd4a7f\n",
 
         argv[0],
@@ -53,7 +53,7 @@ int cmd_recover_raw(int argc, char** argv) {
     setbuf(stdout, NULL);
 
     // Extrapolate CLI arguments, exit if invalid
-    if (argc != 4) {
+    if (argc != 4 || argc != 6) {
         fprintf(stderr, "Incorrect number of arguments.\n");
         print_usage(argc, argv);
         return 1;
@@ -78,6 +78,33 @@ int cmd_recover_raw(int argc, char** argv) {
         fprintf(stderr, "%s is not a valid block address.\n", argv[3]);
         print_usage(argc, argv);
         return 1;
+    }
+
+    paddr_t fs_root_addr = -1;
+    paddr_t omap_root_addr = -1;
+    bool trees_specified = argc == 6;
+    if (trees_specified) {
+        // Capture <fs tree root node address>
+        bool parse_success = sscanf(argv[4], "0x%" PRIx64 "", &fs_root_addr);
+        if (!parse_success) {
+            parse_success = sscanf(argv[4], "%" PRIu64, &fs_root_addr);
+        }
+        if (!parse_success) {
+            fprintf(stderr, "%s is not a valid block address.\n", argv[2]);
+            print_usage(argc, argv);
+            return 1;
+        }
+
+        // Capture <omap tree root node address>
+        parse_success = sscanf(argv[5], "0x%" PRIx64 "", &omap_root_addr);
+        if (!parse_success) {
+            parse_success = sscanf(argv[5], "%" PRIu64, &omap_root_addr);
+        }
+        if (!parse_success) {
+            fprintf(stderr, "%s is not a valid block address.\n", argv[3]);
+            print_usage(argc, argv);
+            return 1;
+        }
     }
     
     // Open (device special) file corresponding to an APFS container, read-only
@@ -406,7 +433,7 @@ int cmd_recover_raw(int argc, char** argv) {
         fprintf(stderr, "\nABORT: Could not allocate sufficient memory for `fs_omap_btree`.\n");
         return -1;
     }
-    if (read_blocks(fs_omap_btree, fs_omap->om_tree_oid, 1) != 1) {
+    if (read_blocks(fs_omap_btree, trees_specified ? omap_root_addr : fs_omap->om_tree_oid, 1) != 1) {
         fprintf(stderr, "\nABORT: Failed to read block 0x%" PRIx64 ".\n", fs_omap->om_tree_oid);
         return -1;
     }
@@ -434,7 +461,7 @@ int cmd_recover_raw(int argc, char** argv) {
         fprintf(stderr, "\nABORT: Could not allocate sufficient memory for `fs_root_btree`.\n");
         return -1;
     }
-    if (read_blocks(fs_root_btree, fs_root_entry->val.ov_paddr, 1) != 1) {
+    if (read_blocks(fs_root_btree, trees_specified ? fs_root_addr : fs_root_entry->val.ov_paddr, 1) != 1) {
         fprintf(stderr, "\nABORT: Failed to read block %#" PRIx64 ".\n", fs_root_entry->val.ov_paddr);
         return -1;
     }
